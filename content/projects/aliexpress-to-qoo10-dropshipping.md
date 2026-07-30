@@ -43,6 +43,45 @@ AliExpress の商品 URL を入力するだけで、Qoo10 出品に必要な日�
 
 ---
 
+## システム動作フロー ＆ UI ギャラリー
+
+本システムによる AliExpress から Qoo10 への一括自動出品フローです：
+
+### ステップ 1: 仕入れ元となる AliExpress 商品ページ
+転送元となる AliExpress の商品ページ（海外向け仕様、英語/中国語のバリエーション、ドル建て価格など）。
+
+![AliExpress 商品ページ例](../assets/ali/01_aliexpress_shoppage_example.png)
+
+### ステップ 2: Typeinput 風 UI への URL インプット
+直感的な UI 画面から、対象となる AliExpress 商品の URL を入力し一括登録キューへ追加します。
+
+![AliExpress URL インプット](../assets/ali/02_一括登録UI_に%20AliExpress%20URLをインプットする.png)
+
+### ステップ 3: バックエンドデータフェッチ ＆ エラーハンドリング
+AliExpress DropShipping API を呼び出し、商品仕様・画像・SKU・リアルタイム送料を取得します。API 制限やエラー発生時には画面上に適切なエラーハンドリングが表示されます。
+
+| API Fetch 実行中 | API 取得エラー時 |
+| :---: | :---: |
+| ![AliExpress Fetch 中](../assets/ali/03_キュー追加画面_AliExpress_fetch%20中_.png) | ![AliExpress API エラー](../assets/ali/03_キュー追加画面_AliExpress_API取得失敗時.png) |
+
+### ステップ 4: LLM ドラフト自動生成 ＆ Qoo10 API 登録
+Gemini 1.5 Flash または Local LLM (Qwen3) が Qoo10 カテゴリ推定・日本語タイトル最適化・下2桁80円丸め着地原価計算を行い、`SetNewGoods` API へ送信します。
+
+| LLM ドラフト生成中 | Qoo10 API 登録中 |
+| :---: | :---: |
+| ![Draft 生成中](../assets/ali/05_キュー追加画面_draft生成中.png) | ![Qoo10 API 登録中](../assets/ali/05_キュー追加画面_Qoo10側API登録中.png) |
+
+### ステップ 5: 登録完了 ＆ 完成した Qoo10 出品ページ
+キューが完了となり Qoo10 商品 ID が割り当てられ、実際の Qoo10 ショップ上に日本語化・価格最適化された完成ページが公開されます。
+
+![登録キュー完了](../assets/ali/06_キュー画面＿登録完了.png)
+
+| Qoo10 出品ページ例 1 | Qoo10 出品ページ例 2 |
+| :---: | :---: |
+| ![Qoo10 登録済み商品ページ 1](../assets/ali/07_実際の登録されたQoo10商品ページ例.png) | ![Qoo10 登録済み商品ページ 2](../assets/ali/07_実際の登録されたQoo10商品ページ例2.png) |
+
+---
+
 ## コア技術と実装の工夫点
 
 ### 1. 二重認証モード対応の AliExpress OAuth 2.0 & レートリミット制御

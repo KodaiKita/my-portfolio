@@ -82,17 +82,17 @@ Docker コンテナ技術を活用し、Minecraft サーバーの可搬性向上
 
 ```mermaid
 graph TD
-    Client["Minecraft Client (Port 25565)"] -->|Public Access| Proxy["Waterfall Proxy Container\n(Modern / BungeeGuard Forwarding)"]
+    Client["Minecraft Client (Port 25565)"] -->|"Public Access"| Proxy["Waterfall Proxy Container<br/>Modern / BungeeGuard Forwarding"]
 
-    subgraph Internal Docker Network [minecraft-net]
-        Proxy -->|Internal Route| Lobby["Lobby Server (Paper 1.8.8)\n+ BungeeGuard"]
-        Proxy -->|Internal Route| Survival["Survival Server (Paper Latest)\n+ Modern Forwarding"]
-        Proxy -->|Internal Route| PVP["PVP Server (Paper 1.8.8)\n+ BungeeGuard"]
+    subgraph internal_net ["Internal Docker Network (minecraft-net)"]
+        Proxy -->|"Internal Route"| Lobby["Lobby Server (Paper 1.8.8)<br/>+ BungeeGuard"]
+        Proxy -->|"Internal Route"| Survival["Survival Server (Paper Latest)<br/>+ Modern Forwarding"]
+        Proxy -->|"Internal Route"| PVP["PVP Server (Paper 1.8.8)<br/>+ BungeeGuard"]
     end
 
-    Admin["Administrator / Script"] -->|RCON (25575)| Lobby
-    Admin -->|RCON (25575)| Survival
-    Admin -->|RCON (25575)| PVP
+    Admin["Administrator / Script"] -->|"RCON (Port 25575)"| Lobby
+    Admin -->|"RCON (Port 25575)"| Survival
+    Admin -->|"RCON (Port 25575)"| PVP
 ```
 
 ---

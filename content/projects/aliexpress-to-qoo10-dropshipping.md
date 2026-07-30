@@ -116,14 +116,33 @@ AliExpress の英語/中国語データを日本の Qoo10 向け高品質ドラ�
 
 ### 3. 着地原価計算エンジン ＆ Qoo10 端数丸めアルゴリズム
 
-正確な利益確保と販売戦略に合わせた自動価格設定アルゴリズムを導入しています：
+正確な利益確保と販売戦略に合わせた自動価格設定アルゴリズムをコードレベルで定義しています：
 
-- **リアルタイム最安送料試算**:
-  - `aliexpress.ds.freight.query` API を呼び出し、追跡可能な最安配送方式の送料を取得して商品価格に加算（着地原価の算出）。
-- **価格帯別マージン設定**:
-  - 仕入れ原価に応じて最適な利益率を自動適用（例: 500円以下は2.5倍、2000円以下は1.7倍、4000円超は1.3倍など）。
-- **「下二桁 80 円」丸め処理**:
-  - 日本の EC 市場で購買率の高い価格表記（例: 1,980 円、2,480 円、3,980 円）へ自動で丸め計算。
+#### (A) 着地原価（Landing Cost）のリアルタイム算出
+`aliexpress.ds.freight.query` API を呼び出し、追跡可能な最安配送方式（Tracking Available）の送料を取得して仕入れ原価に統合します：
+
+$$\text{Landing Cost (JPY)} = \text{Product Price (JPY)} + \min(\text{Freight Cost}_{\text{tracking=true}})$$
+
+#### (B) 価格帯別動的倍率 ＆ 「下2桁80円」丸め計算式
+仕入れ原価に応じたマージン倍率を掛け合わせた後、日本の EC 市場で購買成約率が最も高い「80 円締め価格（例: 1,980 円、2,480 円、3,980 円）」へ自動で端数丸め処理を行います：
+
+```typescript
+// 1) 価格帯に応じたマージン倍率の適用
+function getMarginMultiplier(cost: number): number {
+    if (cost <= 500) return 2.5;
+    if (cost <= 1000) return 2.3;
+    if (cost <= 2000) return 1.7;
+    if (cost <= 4000) return 1.4;
+    return 1.3; // 4,000円超
+}
+
+// 2) 日本EC向け「下2桁80円」インテリジェント丸めアルゴリズム
+function roundToEnding80(rawPrice: number): number {
+    const hundredBase = Math.floor(rawPrice / 100) * 100;
+    const targetPrice = hundredBase + 80;
+    return rawPrice > targetPrice ? targetPrice + 100 : targetPrice;
+}
+```
 
 ### 4. バックグラウンド自動価格・在庫同期ワーカー (`price-maintenance`)
 

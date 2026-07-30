@@ -70,18 +70,53 @@ HLS プレイリストから FFmpeg 経由で WebM/Opus へトランスコーデ
 
 ### 1. ニコニコ動画 (Domand / HLS) 配信システムの解析とリアルタイム変換
 
-ニコニコ動画の最新配信システムである **Domand 形式** に対応するため、以下のフローを独自実装しています (`NicoNicoProvider.ts`)：
+ニコニコ動画の最新配信システムである **Domand 形式** に対応するため、以下の内部処理ロジックを TypeScript / Node.js ストリームとして独自実装しています (`NicoNicoProvider.ts`)：
 
-1. **HTML/メタデータ解析**:
-   - 視聴ページ HTML の `server-response` メタタグ内 JSON をデコードし、トラッキング ID (`watchTrackId`) やアクセスキー (`accessRightKey`) を抽出。
-2. **帯域最適化と最高音質の自動選択**:
-   - 利用可能な音声ストリーム (`domand.audios`) から **最高ビットレートの音声** を自動選択。
-   - ストリーム要求に必要な映像ストリーム (`domand.videos`) は **最低画質の映像** を選択して通信帯域を最小化。
-3. **HLS API 認証 & セッションリクエスト**:
-   - ニコニコ公式 API (`nvapi.nicovideo.jp/v1/watch/.../access-rights/hls`) へ POST リクエストを送り、HLS プレイリスト URL (`contentUrl`) と動的セッション Cookie を取得。
-4. **FFmpeg によるリアルタイム・ストリーミングパイプ**:
-   - 取得した Cookie を `ffmpeg` の HTTP ヘッダーに動的注入し、HLS (`.m3u8`) から WebM / Opus 形式へのトランスコーディング処理を `pipe:1` (標準出力) 経由で `@discordjs/voice` の `AudioPlayer` へストリーミング供給。
-   - ネットワーク寸断対策として `-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 30` パラメータを設定し、高い再生安定性を維持。
+#### (A) HTML メタ解析と JSON トラック抽出
+視聴ページ HTML 内の `<meta name="server-response">` からエンコードされた JSON をデコードし、`watchTrackId` および `accessRightKey` を抽出。利用可能なメディアアレイからストリームを解析します：
+
+```typescript
+// 1) 音声ストリーム: 利用可能なものから最高ビットレート (bps) を動的選択
+const availableAudios = audios.filter((audio: any) => audio.isAvailable === true);
+const bestAudio = availableAudios.sort((a: any, b: any) => b.bitRate - a.bitRate)[0];
+
+// 2) 映像ストリーム: 音声要求に必要なため、最も低画質なトラックを選択し帯域を節約
+const availableVideos = videos.filter((video: any) => video.isAvailable === true);
+const lowestVideo = availableVideos.sort((a: any, b: any) => a.qualityLevel - b.qualityLevel)[0];
+```
+
+#### (B) HLS API セッションリクエスト
+抽出した ID とアクセスキーを用いて、ニコニコ公式 API (`https://nvapi.nicovideo.jp/v1/watch/${videoId}/access-rights/hls?actionTrackId=${watchTrackId}`) へ POST リクエストを発行し、HLS プレイリスト URL (`contentUrl`) と動的セッション Cookie を取得：
+
+```typescript
+const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Access-Right-Key': accessRightKey,
+        'X-Frontend-Id': '6',
+        'Cookie': sessionCookies
+    },
+    body: JSON.stringify({ outputs: [[lowestVideo.id, bestAudio.id]] })
+});
+```
+
+#### (C) FFmpeg トランスコーディング ＆ `PassThrough` パイプ
+取得した `contentUrl` と Cookie を FFmpeg の標準入力・ヘッダーに動的注入し、HLS から WebM / Opus 形式へリアルタイム変換して `@discordjs/voice` に供給します：
+
+```typescript
+const ffmpegArgs = [
+    '-loglevel', 'warning',
+    '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '30',
+    '-headers', `Cookie: ${combinedCookies}`,
+    '-user_agent', 'Mozilla/5.0 ...',
+    '-i', contentUrl,
+    '-vn', '-f', 'webm', '-acodec', 'libopus', '-b:a', '128000',
+    'pipe:1'
+];
+const ffmpegProcess = spawn('ffmpeg', ffmpegArgs, { stdio: ['ignore', 'pipe', 'pipe'] });
+ffmpegProcess.stdout.pipe(stream); // PassThrough ストリームへパイプ
+```
 
 ### 2. 自動ログイン & Cookie 自動更新・障害通知メカニズム
 
